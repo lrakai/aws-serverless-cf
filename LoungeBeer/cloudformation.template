@@ -1,14 +1,429 @@
-﻿{
-	"AWSTemplateFormatVersion" : "2010-09-09",
-
-	"Description" : "",
-
-	"Parameters" : {
-	},
-
-	"Resources" : {
-	},
-
-	"Outputs" : {
-	}
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Cloud Academy Highly Available Serverless Lab",
+    "Mappings": {
+        "UserConfig": {
+            "Login": {
+                "Name": "student",
+                "Pass": "password"
+            }
+        }
+    },
+    "Resources": {
+        "LabKMSKeyAlias": {
+            "DependsOn": "LabKMSKey",
+            "Type": "AWS::KMS::Alias",
+            "Properties": {
+                "AliasName": "alias/cloudacademy_lab_key",
+                "TargetKeyId": {
+                    "Ref": "LabKMSKey"
+                }
+            }
+        },
+        "LabKMSKey": {
+            "DependsOn": "FirehoseToS3DeliveryRole",
+            "Type": "AWS::KMS::Key",
+            "Properties": {
+                "Description": "A sample key",
+                "KeyPolicy": {
+                    "Version": "2012-10-17",
+                    "Id": "key-default-1",
+                    "Statement": [
+                        {
+                            "Sid": "Allow use of the key",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::GetAtt": [
+                                        "FirehoseToS3DeliveryRole",
+                                        "Arn"
+                                    ]
+                                }
+                            },
+                            "Action": [
+                                "kms:Encrypt",
+                                "kms:Decrypt",
+                                "kms:ReEncrypt*",
+                                "kms:GenerateDataKey*",
+                                "kms:DescribeKey"
+                            ],
+                            "Resource": "*"
+                        },
+                        {
+                            "Sid": "Allow administration of the key",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Join": [
+                                        ":",
+                                        [
+                                            "arn:aws:iam:",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            "root"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "Action": [
+                                "kms:Create*",
+                                "kms:Describe*",
+                                "kms:Enable*",
+                                "kms:List*",
+                                "kms:Put*",
+                                "kms:Update*",
+                                "kms:Revoke*",
+                                "kms:Disable*",
+                                "kms:Get*",
+                                "kms:Delete*",
+                                "kms:ScheduleKeyDeletion",
+                                "kms:CancelKeyDeletion"
+                            ],
+                            "Resource": "*"
+                        },
+                        {
+                            "Sid": "Allow student to perform decryption operations",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Join": [
+                                        ":",
+                                        [
+                                            "arn:aws:iam:",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            "user/student"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "Action": [
+                                "kms:Encrypt",
+                                "kms:Decrypt",
+                                "kms:ReEncrypt*",
+                                "kms:GenerateDataKey*",
+                                "kms:DescribeKey"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "LoungeBeerS3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Description",
+                        "Value": "Kinesis Firehose will deliver into this S3 bucket"
+                    }
+                ]
+            }
+        },
+        "CognitoLoungebeerUnauthRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "Cognito_loungebeerUnauth_Role",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Federated": "cognito-identity.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRoleWithWebIdentity",
+                            "Condition": {
+                                "ForAnyValue:StringLike": {
+                                    "cognito-identity.amazonaws.com:amr": "unauthenticated"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "LabsFirehosePut",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "mobileanalytics:PutEvents",
+                                        "cognito-sync:*",
+                                        "firehose:PutRecord",
+                                        "firehose:PutRecordBatch"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "FirehoseToS3DeliveryRole": {
+            "DependsOn": "LoungeBeerS3Bucket",
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "firehose_toS3_delivery_role",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": "",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "firehose.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole",
+                            "Condition": {
+                                "StringEquals": {
+                                    "sts:ExternalId": {
+                                        "Ref": "AWS::AccountId"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "LabsS3Delivery",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Sid": "",
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "s3:AbortMultipartUpload",
+                                        "s3:GetBucketLocation",
+                                        "s3:GetObject",
+                                        "s3:ListBucket",
+                                        "s3:ListBucketMultipartUploads",
+                                        "s3:PutObject"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::GetAtt": [
+                                                "LoungeBeerS3Bucket",
+                                                "Arn"
+                                            ]
+                                        },
+                                        {
+                                            "Fn::Join": [
+                                                "/",
+                                                [
+                                                    {
+                                                        "Fn::GetAtt": [
+                                                            "LoungeBeerS3Bucket",
+                                                            "Arn"
+                                                        ]
+                                                    },
+                                                    "*"
+                                                ]
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                ":",
+                                                [
+                                                    "arn:aws:logs",
+                                                    {
+                                                        "Ref": "AWS::Region"
+                                                    },
+                                                    {
+                                                        "Ref": "AWS::AccountId"
+                                                    },
+                                                    "log-group:/aws/kinesisfirehose/*"
+                                                ]
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "kinesis:DescribeStream",
+                                        "kinesis:GetShardIterator",
+                                        "kinesis:GetRecords"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Join": [
+                                            ":",
+                                            [
+                                                "arn:aws:kinesis",
+                                                {
+                                                    "Ref": "AWS::Region"
+                                                },
+                                                {
+                                                    "Ref": "AWS::AccountId"
+                                                },
+                                                "stream/*"
+                                            ]
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "Group": {
+            "Type": "AWS::IAM::Group",
+            "Properties": {
+                "GroupName": "Students",
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "students-policy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cloudfront:*"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "athena:*"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "s3:*"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cloudwatch:*",
+                                        "lambda:ListFunctions",
+                                        "s3:GetBucketLocation",
+                                        "firehose:PutRecord",
+                                        "firehose:PutRecordBatch",
+                                        "firehose:UpdateDestination",
+                                        "health:DescribeEventAggregates"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "firehose:CreateDeliveryStream"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:GetLogEvents",
+                                        "logs:CreateLogStream",
+                                        "logs:CreateLogGroup",
+                                        "logs:DescribeLogGroups",
+                                        "logs:DescribeLogStreams"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "iam:Get*",
+                                        "iam:List*",
+                                        "firehose:ListDeliveryStreams",
+                                        "firehose:DescribeDeliveryStream",
+                                        "s3:ListAllMyBuckets",
+                                        "kms:ListAliases"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cognito-identity:*",
+                                        "cognito-idp:*",
+                                        "cognito-sync:*",
+                                        "iam:ListRoles",
+                                        "iam:ListOpenIdConnectProviders",
+                                        "iam:PassRole",
+                                        "sns:ListPlatformApplications"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Action": [
+                                        "ec2:ModifyInstanceAttribute",
+                                        "ec2:*Reserved*",
+                                        "ec2:*Spot*",
+                                        "dynamodb:*Reserved*",
+                                        "rds:*Reserved*",
+                                        "elasticache:*Reserved*",
+                                        "redshift:*Reserved*",
+                                        "aws-marketplace:*"
+                                    ],
+                                    "Resource": "*",
+                                    "Effect": "Deny"
+                                },
+                                {
+                                    "Action": [
+                                        "ec2:AllocateHosts"
+                                    ],
+                                    "Resource": "*",
+                                    "Effect": "Deny"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "User": {
+            "Type": "AWS::IAM::User",
+            "Properties": {
+                "LoginProfile": {
+                    "Password": {
+                        "Fn::FindInMap": [
+                            "UserConfig",
+                            "Login",
+                            "Pass"
+                        ]
+                    }
+                },
+                "Path": "/",
+                "Groups": [
+                    "Students"
+                ],
+                "UserName": {
+                    "Fn::FindInMap": [
+                        "UserConfig",
+                        "Login",
+                        "Name"
+                    ]
+                }
+            }
+        }
+    }
 }
