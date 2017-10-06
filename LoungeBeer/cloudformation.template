@@ -299,34 +299,14 @@
                                 {
                                     "Effect": "Allow",
                                     "Action": [
-                                        "cloudfront:*"
-                                    ],
-                                    "Resource": "*"
-                                },
-                                {
-                                    "Effect": "Allow",
-                                    "Action": [
-                                        "athena:*"
-                                    ],
-                                    "Resource": "*"
-                                },
-                                {
-                                    "Effect": "Allow",
-                                    "Action": [
-                                        "s3:*"
-                                    ],
-                                    "Resource": "*"
-                                },
-                                {
-                                    "Effect": "Allow",
-                                    "Action": [
-                                        "cloudwatch:*",
                                         "lambda:ListFunctions",
                                         "s3:GetBucketLocation",
+										"s3:ListAllMyBuckets",
                                         "firehose:PutRecord",
                                         "firehose:PutRecordBatch",
                                         "firehose:UpdateDestination",
-                                        "health:DescribeEventAggregates"
+                                        "health:DescribeEventAggregates",
+										"cloudwatch:GetMetricStatistics"
                                     ],
                                     "Resource": "*"
                                 },
